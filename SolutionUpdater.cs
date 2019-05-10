@@ -1,5 +1,7 @@
 ﻿using EnvDTE;
 using EnvDTE80;
+using System.Collections.Generic;
+using System.Linq;
 using System.IO;
 using System.Xml;
 
@@ -13,11 +15,10 @@ namespace ProjectUpdater
         string sDevExpress = "DevExpress";
         string sLicx = "licx";
         string sResx = "resx";
-        string sProperties = @"\Properties";
-        string sMyProject = @"\My Project";
         string sEmbeddedResource = "EmbeddedResource";
         string sAssembly = "assembly";
         string sName = "name";
+        string sValue = "value";
 
         public void UpdateSolution(DTE2 dte)
         {
@@ -28,18 +29,8 @@ namespace ProjectUpdater
                     string projFileName = proj.FileName;
                     if (string.IsNullOrWhiteSpace(projFileName))
                         continue;
-                    DeleteLicx(projFileName);
                     UpdateProj(projFileName);
                 }
-        }
-
-        void DeleteLicx(string projFileName)
-        {
-            string propertiesFolder = GetParentDirectory(projFileName);
-            propertiesFolder += Directory.Exists(propertiesFolder + sProperties) ? sProperties : sMyProject;
-            string[] allFiles = Directory.GetFiles(propertiesFolder, string.Format("*.{0}", sLicx));
-            foreach (string file in allFiles)
-                File.Delete(file);
         }
 
         void UpdateProj(string projFileName)
@@ -47,14 +38,14 @@ namespace ProjectUpdater
             XmlDocument doc = new XmlDocument();
             doc.Load(projFileName);
 
-            if (PerformUpdate(doc, true) | PerformUpdate(doc, false, GetParentDirectory(projFileName)))
+            if (UpdateProjCore(doc, true) | UpdateProjCore(doc, false, GetParentDirectory(projFileName)))
                 doc.Save(projFileName);
         }
 
-        private bool PerformUpdate(XmlDocument doc, bool references, string docParentDirectory = "")
+        private bool UpdateProjCore(XmlDocument doc, bool references, string docParentDirectory = "")
         {
             string tagName = references ? sReference : sEmbeddedResource;
-            XmlNodeList projNodes = doc.GetElementsByTagName(tagName);
+            List<XmlNode> projNodes = doc.GetElementsByTagName(tagName).Cast<XmlNode>().ToList();
             string nodeValue;
             string newNodeValue;
             XmlNode node;
@@ -80,22 +71,63 @@ namespace ProjectUpdater
                             {
                                 if (nodeValue.Contains(sLicx))
                                 {
-                                    node.ParentNode.RemoveChild(node);
+                                    DeleteLicx(GetFilePath(docParentDirectory, nodeValue), node);
                                     res = true;
                                 }
                                 else if (nodeValue.Contains(sResx))
-                                    ProcessResx(docParentDirectory + string.Format(@"\{0}", nodeValue));
+                                    UpdateResx(GetFilePath(docParentDirectory, nodeValue));
                             }
                     }
             }
             return res;
         }
 
-        void ProcessResx(string filePath)
+        void DeleteLicx(string filePath, XmlNode node)
+        {
+            node.ParentNode.RemoveChild(node);
+            if (File.Exists(filePath))
+                File.Delete(filePath);
+        }
+
+        string GetFilePath(string docParentDirectory, string nodeValue)
+        {
+            return docParentDirectory + string.Format(@"\{0}", nodeValue);
+        }
+
+        void UpdateResx(string filePath)
         {
             XmlDocument doc = new XmlDocument();
             doc.Load(filePath);
-            XmlNodeList projNodes = doc.GetElementsByTagName(sAssembly);
+
+            XmlNodeList assemblyNodes = doc.GetElementsByTagName(sAssembly);
+            XmlNodeList valueNodes  = doc.GetElementsByTagName(sValue);
+
+            if (UpdateAssemblyNodes(assemblyNodes) | UpdateValueNodes(valueNodes))
+                doc.Save(filePath);
+        }
+
+        bool UpdateValueNodes(XmlNodeList projNodes)
+        {
+            string nodeValue;
+            string newNodeValue;
+            XmlNode node;
+            bool res = false;
+            for (int nodeIndex = 0; nodeIndex < projNodes.Count; nodeIndex++)
+            {
+                node = projNodes[nodeIndex];
+                nodeValue = node.InnerText;
+                newNodeValue = RemoveReferenceVersion(nodeValue);
+                if(nodeValue != newNodeValue)
+                {
+                    node.InnerText = newNodeValue;
+                    res = true;
+                }
+            }
+            return res;
+        }
+
+        bool UpdateAssemblyNodes(XmlNodeList projNodes)
+        {
             string nodeValue;
             string newNodeValue;
             XmlNode node;
@@ -117,22 +149,26 @@ namespace ProjectUpdater
                     }
                 }
             }
-            if (res)
-                doc.Save(filePath);
+            return res;
         }
 
-        private string RemoveReferenceVersion(string str)
+        string RemoveReferenceVersion(string str)
         {
-            if (str.Contains(sDevExpress))
-            {
-                int startIndex = str.IndexOf(',');
-                if (startIndex >= 0)
-                    str = str.Remove(startIndex);
-            }
+            int removeIndex = str.LastIndexOf(sDevExpress);
+            if (removeIndex >= 0)
+                str = RemoveReferenceVersionCore(str, removeIndex);
             return str;
         }
 
-        private string GetParentDirectory(string projFileName)
+        string RemoveReferenceVersionCore(string str, int startIndex)
+        {
+            int removeIndex = str.IndexOf(',', startIndex);
+            if (removeIndex >= 0)
+                str = str.Remove(removeIndex);
+            return str;
+        }
+
+        string GetParentDirectory(string projFileName)
         {
             return Directory.GetParent(projFileName).FullName;
         }
