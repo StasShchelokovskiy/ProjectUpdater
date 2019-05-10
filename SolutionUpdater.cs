@@ -38,11 +38,11 @@ namespace ProjectUpdater
             XmlDocument doc = new XmlDocument();
             doc.Load(projFileName);
 
-            if (PerformUpdate(doc, true) | PerformUpdate(doc, false, GetParentDirectory(projFileName)))
+            if (UpdateProjCore(doc, true) | UpdateProjCore(doc, false, GetParentDirectory(projFileName)))
                 doc.Save(projFileName);
         }
 
-        private bool PerformUpdate(XmlDocument doc, bool references, string docParentDirectory = "")
+        private bool UpdateProjCore(XmlDocument doc, bool references, string docParentDirectory = "")
         {
             string tagName = references ? sReference : sEmbeddedResource;
             List<XmlNode> projNodes = doc.GetElementsByTagName(tagName).Cast<XmlNode>().ToList();
@@ -102,7 +102,7 @@ namespace ProjectUpdater
             XmlNodeList assemblyNodes = doc.GetElementsByTagName(sAssembly);
             XmlNodeList valueNodes  = doc.GetElementsByTagName(sValue);
 
-            if (UpdateAssemblyNodes(assemblyNodes) || UpdateValueNodes(valueNodes))
+            if (UpdateAssemblyNodes(assemblyNodes) | UpdateValueNodes(valueNodes))
                 doc.Save(filePath);
         }
 
