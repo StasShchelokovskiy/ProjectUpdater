@@ -1,3 +1,3 @@
 # ProjectUpdater
 
-При работе с проектами от пользователей в них могут оставаться licx файлы и прописаны минорные версии. С помощиью этого расширения(автор Станислав Щелоковский) можно легко обновить проект, чтобы он собирался
+Removes licx files, sets SpecificVersion to false for all referenced assemblies and updates resx files.
